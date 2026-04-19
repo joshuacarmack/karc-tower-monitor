@@ -32,7 +32,7 @@ def read_environment():
         import board
         import adafruit_bme280.basic as adafruit_bme280
         i2c = board.I2C()
-        bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+        bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c, address=0x76)
         return {
             "temperature_f": round((bme280.temperature * 9/5) + 32, 1),
             "humidity":      round(bme280.relative_humidity, 1),
