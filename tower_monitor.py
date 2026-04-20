@@ -28,8 +28,19 @@ def get_uptime():
 
 def read_cellular_stats():
     try:
+        list_result = subprocess.run(
+            ["mmcli", "-L"],
+            capture_output=True, text=True, timeout=10
+        )
+        modem_index = None
+        for line in list_result.stdout.splitlines():
+            if "Modem/" in line:
+                modem_index = line.strip().split("Modem/")[1].split(" ")[0]
+                break
+        if modem_index is None:
+            return None
         result = subprocess.run(
-            ["mmcli", "-m", "0", "--output-json"],
+            ["mmcli", "-m", modem_index, "--output-json"],
             capture_output=True, text=True, timeout=10
         )
         data = json.loads(result.stdout)
