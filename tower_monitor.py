@@ -5,6 +5,7 @@ import time
 import socket
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
+import subprocess
 
 # ── Configuration ──────────────────────────────────────────
 MQTT_BROKER   = "mqtt.jclab.xyz"
@@ -25,9 +26,25 @@ def get_uptime():
         seconds = float(f.readline().split()[0])
     return round(seconds / 3600, 2)  # hours
 
+def read_cellular_stats():
+    try:
+        result = subprocess.run(
+            ["mmcli", "-m", "0", "--output-json"],
+            capture_output=True, text=True, timeout=10
+        )
+        data = json.loads(result.stdout)
+        modem = data["modem"]
+        return {
+            "signal_quality": int(modem["generic"]["signal-quality"]["value"]),
+            "access_tech": modem["generic"]["access-technologies"][0],
+            "operator": modem["3gpp"]["operator-name"],
+            "state": modem["generic"]["state"],
+        }
+    except Exception as e:
+        print(f"Cellular stats error: {e}")
+        return None
+
 def read_environment():
-    # BME280 not yet connected — returns None until sensor is live
-    # Will be populated when adafruit-circuitpython-bme280 is wired up
     try:
         import board
         import adafruit_bme280.basic as adafruit_bme280
@@ -57,13 +74,12 @@ def build_client():
 def publish(client, topic, payload):
     payload["timestamp"] = datetime.now(timezone.utc).isoformat()
     msg = json.dumps(payload)
-    result = client.publish(topic, msg, qos=1, retain=False)
+    result = client.publish(topic, msg, qos=1, retain=True)
     print(f"→ {topic}: {msg}")
     return result
 
 def main():
     client = build_client()
-
     while True:
         try:
             client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
@@ -81,11 +97,15 @@ def main():
         now = time.time()
 
         if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-            publish(client, TOPIC_HEARTBEAT, {
+            heartbeat = {
                 "status": "online",
                 "uptime_hours": get_uptime(),
                 "hostname": socket.gethostname(),
-            })
+            }
+            cell = read_cellular_stats()
+            if cell:
+                heartbeat.update(cell)
+            publish(client, TOPIC_HEARTBEAT, heartbeat)
             last_heartbeat = now
 
         if now - last_environment >= ENVIRONMENT_INTERVAL:
